@@ -1,94 +1,78 @@
-import express from "express";
-import TelegramBot from "node-telegram-bot-api";
-import dotenv from "dotenv";
-import cors from "cors";
+import express from 'express';
+import TelegramBot from 'node-telegram-bot-api';
+import dotenv from 'dotenv';
+import cors from 'cors';
 
-// Load environment variables
+// Load variabel environment
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors()); // Sangat penting agar React nanti bisa narik data ke sini
-app.use(express.json({ limit: "10mb" })); // Agar bisa nerima file foto Base64 ukuran besar
+// Izinkan akses lintas domain (CORS) untuk React
+app.use(cors()); 
+// Tingkatkan limit payload untuk menerima foto Base64
+app.use(express.json({ limit: '10mb' })); 
 
-// Validasi Token
+// Validasi environment variables Telegram
 if (!process.env.TELEGRAM_TOKEN || !process.env.CHAT_ID) {
-  console.error(
-    "❌ ERROR: TELEGRAM_TOKEN atau CHAT_ID belum di-set di file .env",
-  );
-  process.exit(1);
+    console.error('❌ ERROR: TELEGRAM_TOKEN atau CHAT_ID belum di-set di file .env');
+    process.exit(1);
 }
 
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN.trim(), {
-  polling: false,
-});
+// Inisialisasi bot Telegram
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN.trim(), { polling: false });
 
-// 🌟 "DATABASE" SEMENTARA (In-Memory)
-// Karena ini demo, kita simpan status terakhir di dalam RAM (variabel).
-// Nanti React akan mengambil data dari variabel ini.
+// In-memory state untuk menyimpan status CCTV terbaru
 let statusCCTV = {
-  kondisi: "Aman",
-  waktuTerakhir: "-",
-  barangBawaan: [],
-  fotoBase64: null,
+    kondisi: "Aman",
+    waktuTerakhir: "-",
+    barangBawaan: [],
+    fotoBase64: null
 };
 
-// =================================================================
-// [1] ENDPOINT UNTUK PYTHON: Menerima hasil deteksi (POST)
-// =================================================================
-app.post("/api/alert", async (req, res) => {
-  const { tipe, info, image } = req.body;
+// Endpoint POST: Menerima data alert dari AI Python
+app.post('/api/alert', async (req, res) => {
+    const { tipe, info, image } = req.body;
+    
+    // Update state global
+    statusCCTV = {
+        kondisi: tipe,
+        waktuTerakhir: new Date().toLocaleString('id-ID'),
+        barangBawaan: info,
+        fotoBase64: image
+    };
 
-  // 1. Update status di database sementara kita
-  statusCCTV = {
-    kondisi: tipe,
-    waktuTerakhir: new Date().toLocaleString("id-ID"),
-    barangBawaan: info,
-    fotoBase64: image,
-  };
+    const detail = info.join(', ');
+    const pesan = `⚠️ **CCTV ALERT:** Terdeteksi membawa: *${detail}*`;
 
-  const detail = info.join(", ");
-  const pesan = `⚠️ **CCTV ALERT:** Terdeteksi orang membawa: *${detail}*`;
-
-  // 2. Teruskan notifikasi ke Telegram
-  try {
-    if (image) {
-      // Bersihkan header base64 sebelum diubah jadi file binary/buffer
-      const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-      const imageBuffer = Buffer.from(base64Data, "base64");
-
-      await bot.sendPhoto(process.env.CHAT_ID.trim(), imageBuffer, {
-        caption: pesan,
-        parse_mode: "Markdown",
-      });
-      console.log(`📸 Peringatan dikirim ke Telegram: ${detail}`);
-    } else {
-      await bot.sendMessage(process.env.CHAT_ID.trim(), pesan, {
-        parse_mode: "Markdown",
-      });
+    try {
+        if (image) {
+            // Konversi Base64 ke Buffer untuk dikirim via Telegram
+            const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+            const imageBuffer = Buffer.from(base64Data, 'base64');
+            
+            // Kirim notifikasi foto ke Telegram
+            await bot.sendPhoto(process.env.CHAT_ID.trim(), imageBuffer, { caption: pesan, parse_mode: 'Markdown' });
+            console.log(`📸 Peringatan dikirim ke Telegram: ${detail}`);
+        } else {
+            // Kirim notifikasi teks jika tidak ada gambar
+            await bot.sendMessage(process.env.CHAT_ID.trim(), pesan, { parse_mode: 'Markdown' });
+        }
+        
+        res.status(200).json({ success: true, message: 'Alert diproses' });
+    } catch (error) {
+        console.error('❌ Gagal kirim Telegram:', error.message);
+        res.status(500).json({ success: false, error: 'Internal Server Error' });
     }
-
-    res
-      .status(200)
-      .json({ success: true, message: "Alert diterima dan diproses" });
-  } catch (error) {
-    console.error("❌ Gagal kirim Telegram:", error.message);
-    res.status(500).json({ success: false, error: "Internal Server Error" });
-  }
 });
 
-// =================================================================
-// [2] ENDPOINT UNTUK REACT: Mengambil status terbaru (GET)
-// =================================================================
-app.get("/api/status", (req, res) => {
-  // React akan melakukan 'fetch' ke sini untuk update UI Dashboard
-  res.status(200).json(statusCCTV);
+// Endpoint GET: Menyediakan status terbaru untuk React UI
+app.get('/api/status', (req, res) => {
+    res.status(200).json(statusCCTV);
 });
 
-// Jalankan Server
+// Start server Express
 app.listen(port, () => {
-  console.log(`🚀 API Gateway (Express) berjalan di http://localhost:${port}`);
-  console.log(`📡 Menunggu koneksi dari AI Python...`);
+    console.log(` API Gateway berjalan di http://localhost:${port}`);
 });

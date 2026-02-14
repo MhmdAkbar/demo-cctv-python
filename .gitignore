@@ -1,10 +1,13 @@
-# Node & Express & React
+# Node.js & React
 node_modules/
 dist/
-
-# Python
-venv/
-__pycache__/
-
-# Rahasia
 .env
+
+# Python AI
+ai/venv/
+ai/__pycache__/
+ai/*.pt
+
+# OS Files
+.DS_Store
+Thumbs.db
