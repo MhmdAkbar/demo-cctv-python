@@ -1,5 +1,3 @@
----
-
 # Demo CCTV Python
 
 ## Deskripsi
