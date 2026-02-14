@@ -1,0 +1,10 @@
+# Node & Express & React
+node_modules/
+dist/
+
+# Python
+venv/
+__pycache__/
+
+# Rahasia
+.env
